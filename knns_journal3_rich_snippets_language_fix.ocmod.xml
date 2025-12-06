@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+	<id><![CDATA[Journal3 Rich Snippets Language Fix]]></id>
+	<name><![CDATA[Journal3 Rich Snippets Language Fix]]></name>
+	<code>knns_journal3_rich_snippets_language_fix</code>
+	<version>1.0.0</version>
+	<author><![CDATA[<font color="#7F458C"><b>kanenas.net (aka Nikolas Branis)</b></font> - nbran@kanenas.net]]></author>
+	<link>https://kanenas.net/</link>
+
+	<file path="catalog/controller/journal3/seo.php">
+		<!-- Fix Product URL in Rich Snippets to use current request URL (language-specific) -->
+		<operation>
+			<search><![CDATA[						static::$tags['url'] = $this->url->link('product/product', 'product_id=' . $id);]]></search>
+			<add position="replace"><![CDATA[// Use current request URL to ensure language-specific SEO URL
+						if (isset($this->request->server['HTTP_HOST']) && isset($this->request->server['REQUEST_URI'])) {
+							$protocol = Request::isHttps() ? 'https://' : 'http://';
+							$current_url = $protocol . $this->request->server['HTTP_HOST'] . $this->request->server['REQUEST_URI'];
+							$current_url = strtok($current_url, '?');
+							static::$tags['url'] = $current_url;
+						} else {
+							static::$tags['url'] = $this->url->link('product/product', 'product_id=' . $id);
+						}]]></add>
+		</operation>
+
+		<!-- Fix Product Description to always get from current language -->
+		<operation>
+			<search><![CDATA[						static::$tags['description'] = trim(\Journal3\Utils\Str::utf8_substr(strip_tags(html_entity_decode($product_info['description'], ENT_QUOTES, 'UTF-8')), 0, 300));]]></search>
+			<add position="replace"><![CDATA[// Always get description from database for current language to ensure correct language
+						$lang_code = isset($this->session->data['language']) ? $this->session->data['language'] : $this->config->get('config_language');
+						$this->load->model('localisation/language');
+						$languages = $this->model_localisation_language->getLanguages();
+						$lang_id = isset($languages[$lang_code]) ? $languages[$lang_code]['language_id'] : $this->config->get('config_language_id');
+						$desc_query = $this->db->query("SELECT description FROM " . DB_PREFIX . "product_description WHERE product_id = '" . (int)$id . "' AND language_id = '" . (int)$lang_id . "' LIMIT 1");
+						$description = ($desc_query->num_rows && !empty($desc_query->row['description'])) ? $desc_query->row['description'] : $product_info['description'];
+						static::$tags['description'] = trim(\Journal3\Utils\Str::utf8_substr(strip_tags(html_entity_decode($description, ENT_QUOTES, 'UTF-8')), 0, 300));]]></add>
+		</operation>
+
+		<!-- Fix WebSite schema description to be language-specific -->
+		<operation>
+			<search><![CDATA[		$jsons = array();]]></search>
+			<add position="after"><![CDATA[
+		// Always get language-specific site description using correct language_id
+		$lang_code = isset($this->session->data['language']) ? $this->session->data['language'] : $this->config->get('config_language');
+		$this->load->model('localisation/language');
+		$languages = $this->model_localisation_language->getLanguages();
+		$lang_id = isset($languages[$lang_code]) ? $languages[$lang_code]['language_id'] : $this->config->get('config_language_id');
+		$config_desc = $this->config->get('config_meta_description');
+		$site_description = '';
+		if (is_array($config_desc) && isset($config_desc[$lang_id])) {
+			$site_description = $config_desc[$lang_id];
+		} elseif (!empty($config_desc) && !is_array($config_desc)) {
+			$site_description = $config_desc;
+		} else {
+			$site_description = self::getTags('site_description');
+		}]]></add>
+		</operation>
+
+		<operation>
+			<search><![CDATA[			'description'     => self::getTags('site_description'),]]></search>
+			<add position="replace"><![CDATA[			'description'     => $site_description,]]></add>
+		</operation>
+	</file>
+
+</modification>
